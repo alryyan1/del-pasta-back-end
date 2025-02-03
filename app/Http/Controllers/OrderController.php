@@ -82,7 +82,7 @@ Text;
                 $q->whereRaw('Date(created_at) = ?',[$date]);
         });
 //        return ['data'=> $query->orderByDesc('id')->paginate($page) , 'analytics'=> \DB::getQueryLog()];
-        return $query->orderByDesc('id')->paginate($request->get('page'));
+        return $query->orderByDesc('id')->paginate(1000);
 
 
     }

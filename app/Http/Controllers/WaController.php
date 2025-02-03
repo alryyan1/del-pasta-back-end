@@ -19,14 +19,14 @@ class WaController extends Controller
         $client = new \GuzzleHttp\Client();
         try {
 
-            $response = $client->post( 'https://waapi.app/api/v1/instances/32144/client/action/send-message', [
+            $response = $client->post( 'https://waapi.app/api/v1/instances/36160/client/action/send-message', [
                 'body' => json_encode([
                     'message' => $msg,
-                    'chatId' => '249991961111@c.us',
+                     'chatId' =>'968'.$order?->customer?->phone .'@c.us',
                 ]),
                 'headers' => [
                     'accept' => 'application/json',
-                    'authorization' => 'Bearer TkMjJdSCXophIf50uG91iG6xkIe3JhKABg2Z2lkB3b0575ea',
+                    'authorization' => 'Bearer RMWHYZImQM4NrIB2ttFhlsxF4DaMTPpL7qyn2U329d42cb18',
                     'content-type' => 'application/json',
                 ],
             ]);
@@ -48,15 +48,15 @@ class WaController extends Controller
         $client = new \GuzzleHttp\Client();
         try {
 
-            $response = $client->post( 'https://waapi.app/api/v1/instances/32144/client/action/send-location', [
+            $response = $client->post( 'https://waapi.app/api/v1/instances/36160/client/action/send-location', [
                 'body' => json_encode([
                     'longitude' => 56.822308144953524,
                     'latitude' => 24.258748156049695,
-                    'chatId' => '249991961111@c.us',
+                    'chatId' =>'968'.$order?->customer?->phone .'@c.us',
                 ]),
                 'headers' => [
                     'accept' => 'application/json',
-                    'authorization' => 'Bearer TkMjJdSCXophIf50uG91iG6xkIe3JhKABg2Z2lkB3b0575ea',
+                    'authorization' => 'Bearer RMWHYZImQM4NrIB2ttFhlsxF4DaMTPpL7qyn2U329d42cb18',
                     'content-type' => 'application/json',
                 ],
             ]);
@@ -75,7 +75,7 @@ class WaController extends Controller
 
 
     }
-    public function sendDocument(Request $request,$data)
+    public function sendDocument(Request $request,$data,$phone)
     {
 //        return $data;
 
@@ -86,11 +86,11 @@ class WaController extends Controller
 
 $client = new \GuzzleHttp\Client();
 
-$response = $client->request('POST', 'https://waapi.app/api/v1/instances/32144/client/action/send-media', [
-    'body' => json_encode(["mediaBase64"=>"$data","mediaName"=>"file.pdf","chatId"=>"249991961111@c.us"]),
+$response = $client->request('POST', 'https://waapi.app/api/v1/instances/36160/client/action/send-media', [
+    'body' => json_encode(["mediaBase64"=>"$data","mediaName"=>"file.pdf","chatId"=>"968"."$phone@c.us"]),
     'headers' => [
         'accept' => 'application/json',
-        'authorization' => 'Bearer TkMjJdSCXophIf50uG91iG6xkIe3JhKABg2Z2lkB3b0575ea',
+        'authorization' => 'Bearer RMWHYZImQM4NrIB2ttFhlsxF4DaMTPpL7qyn2U329d42cb18',
         'content-type' => 'application/json',
     ],
 ]);

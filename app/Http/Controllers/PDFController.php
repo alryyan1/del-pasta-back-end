@@ -317,8 +317,8 @@ class PDFController extends Controller
             foreach ($orderMeal->requestedChildMeals as $requestedChildMeal){
                 $pdf->Cell($colWidth*2,5,$requestedChildMeal->childMeal->service->name,'B',0,fill: 0);
 //                $pdf->Cell($colWidth/2,5,'','B',0,fill: 0); //comment this line if using del-pasta
-                $pdf->Cell($colWidth/2,5,$requestedChildMeal->quantity,'B',0,fill: 0); //del pasta
-                $pdf->Cell($colWidth/2,5,$requestedChildMeal->price,'B',1,fill: 0,align: 'C');
+                $pdf->Cell($colWidth/2,5,$requestedChildMeal->quantity * $requestedChildMeal->count ,'B',0,fill: 0); //del pasta
+                $pdf->Cell($colWidth/2,5,$requestedChildMeal->price * $requestedChildMeal->count,'B',1,fill: 0,align: 'C');
 
             }
             $index++;
@@ -408,7 +408,9 @@ class PDFController extends Controller
             $result_as_bs64 = $pdf->output('name.pdf', 'S');
 //            Whatsapp::sendPdf($result_as_bs64, $order->customer->phone);
              $wa = new WaController();
-             $wa->sendDocument($request,$result_as_bs64);
+                          $wa->sendDocument($request,$result_as_bs64,$order?->customer?->phone);
+
+            //  $wa->sendDocument($request,$result_as_bs64);
         }
 
         if ($request->has('base64')) {
@@ -420,7 +422,7 @@ class PDFController extends Controller
 
                 $wa = new WaController();
 
-              return  $wa->sendDocument($request,$data);
+              return  $wa->sendDocument($request,$data,$order?->customer?->phone);
 
             }else{
                 $result_as_bs64 = $pdf->output('name.pdf', 'E');
