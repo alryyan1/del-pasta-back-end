@@ -13,11 +13,11 @@ class DeductController extends Controller
 {
     public function store(Request $request,Order $order)
     {
-        \DB::beginTransaction();
+        // \DB::beginTransaction();
         if (!$request->add){
 
         $result =$order->deducts()->delete();
-            \DB::commit();
+            // \DB::commit();
             return ['show'=>$result,'order'=>$order->fresh(),'rm'=>true];
         }
          /** @var OrderMeal $mealOrder */
@@ -29,7 +29,7 @@ class DeductController extends Controller
             }
         }
 
-        \DB::commit();
+        // \DB::commit();
         return ['order'=>$order->fresh(),'show'=>true];
     }
 }

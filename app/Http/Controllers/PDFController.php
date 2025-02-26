@@ -59,7 +59,151 @@ class PDFController extends Controller
 //        $this->middleware(['permission:add items']);
 
     }
+   
+    
+    
+        public function ordersAi(Request $request)
+        {
+            // Initialize TCPDF
+            $pdf = new Pdf('l', PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
+            $pdf->setFontSubsetting(true);
+            $pdf->setCompression(true);
+    
+            // Language settings (Arabic)
+            $lg = array();
+            $lg['a_meta_charset'] = 'UTF-8';
+            $lg['a_meta_dir'] = 'rtl';
+            $lg['a_meta_language'] = 'fa';
+            $lg['w_page'] = 'page';
+            $pdf->setLanguageArray($lg);
+    
+            // Document information
+            $pdf->setCreator(PDF_CREATOR);
+            $pdf->setAuthor('Your Name/Company'); // Replace with your name or company
+            $pdf->setTitle('تقرير الطلبات'); // Report title in Arabic
+            $pdf->setSubject('تقرير تفصيلي بالطلبات'); // Report subject in Arabic
+            $pdf->setKeywords('تقرير, طلبات, مبيعات'); // Keywords in Arabic
+    
+            // Header and footer settings
+            $pdf->setHeaderData(PDF_HEADER_LOGO, PDF_HEADER_LOGO_WIDTH, 'تقرير الطلبات', ' '); // Removed default header string.  Added title only.
+            $pdf->setHeaderFont(array(PDF_FONT_NAME_MAIN, '', PDF_FONT_SIZE_MAIN));
+            $pdf->setFooterFont(array(PDF_FONT_NAME_DATA, '', PDF_FONT_SIZE_DATA));
+    
+            // Margins and other settings
+            $pdf->setDefaultMonospacedFont(PDF_FONT_MONOSPACED);
+            $pdf->setMargins(PDF_MARGIN_LEFT, 20, PDF_MARGIN_RIGHT);  // Increased top margin
+            $pdf->setHeaderMargin(PDF_MARGIN_HEADER);
+            $pdf->setFooterMargin(PDF_MARGIN_FOOTER);
+            $pdf->setAutoPageBreak(TRUE, PDF_MARGIN_BOTTOM);
+    
+            // Font settings
+            $fontname = TCPDF_FONTS::addTTFfont(public_path('arial.ttf'), 'TrueTypeUnicode', '', 32); // Ensure Arial.ttf exists.  Added encoding for better UTF-8 support.
+            $pdf->setFont($fontname, '', 10); // Set a default font size.  Use smaller size for better fit in cells.
+            $pdf->setImageScale(PDF_IMAGE_SCALE_RATIO); //Added for proper image scaling.
+            // Add a page
+            $pdf->AddPage();
+    
+            // Page width calculation
+            $page_width = $pdf->getPageWidth() - PDF_MARGIN_LEFT - PDF_MARGIN_RIGHT;
+    
+            // Header Content (moved outside of the "head" function to be executed only once)
+            $date = new Carbon('now');
+            $date = $date->format('Y/m/d');
+            $settings = Settings::first(); // Assuming you have a Settings model
+            $settings= Settings::all()->first();
+            $img_base64_encoded =  $settings->header_base64;
+            $img = base64_decode(preg_replace('#^data:image/[^;]+;base64,#', '', $img_base64_encoded));
+            $pdf->Ln();
+            if ($settings->is_logo ){
+    //            $pdf->Image("@".$img, 50 , 0, 80, 20,align: 'C',fitbox: 1);// radi
+                $pdf->Image("@".$img, 50 , 5, 80, 25,align: 'C',fitbox: 1); //اسعد
+    
+            }
+    
+    
+            $pdf->setFont($fontname, 'B', 16); //Bold, bigger for company name
+            $pdf->SetXY(40, 10); //Position after the logo
+            $pdf->Cell($page_width - 40, 5, $settings?->kitchen_name, 0, 1, 'C'); // Adjust width and position.
+            $pdf->SetXY(40, 16); //Position below company name.
+            $pdf->Cell($page_width - 40, 5, 'تقرير الطلبات', 0, 1, 'C'); // Report title
+            $pdf->SetXY(40, 22);
+            $pdf->SetFont($fontname, '', 12);
+            $pdf->Cell(40 , 5, ' مفردات البحث ' , 0, 1, 'R'); //Report date
+            $pdf->Cell(20 , 5, '  المحافظه ' , 0, 0, 'C'); //Report date
+            $pdf->Cell(40 , 5, $request->get('searchByCity') , 'B', 0, 'C'); //Report date
+            $pdf->Cell(20 , 5, '  المنطقه ' , 0, 0, 'C'); //Report date
+            $pdf->Cell(40 , 5, $request->get('state') , 'B', 1, 'C'); //Report date
+            $pdf->Ln(5); // Add some space after the header.
+    
+            // Table Header
+            $pdf->setFont($fontname, 'B', 10);
+            $pdf->setFillColor(220, 220, 220); // Light gray background
+            $col = $page_width /7;
+    
+            $pdf->Cell($col , 5, 'رقم الطلب', 'TB', 0, 'C', true);
+            $pdf->Cell($col , 5, 'اسم الزبون', 'TB', 0, 'C', true);
+            $pdf->Cell($col , 5, 'المنطقه', 'TB', 0, 'C', true);
+            $pdf->Cell($col , 5, 'حاله الطلب', 'TB', 0, 'C', true);
+            $pdf->Cell($col , 5, 'هاتف ', 'TB', 0, 'C', true);
+            $pdf->Cell($col , 5, 'المتبقي', 'TB', 0, 'C', true);
+            $pdf->Cell($col , 5, 'ملاحظات', 'TB', 1,fill:1);
+    
+            // Fetch orders
+            $delivery_date = $request->get('date');
+            $ordersQuery = Order::query();
+    
+            $ordersQuery->when($delivery_date != null, function (\Illuminate\Database\Eloquent\Builder $q) use ($delivery_date) {
+                $query_date = Carbon::parse($delivery_date)->format('Y-m-d');
+                $q->whereDate('created_at', '=', $query_date)->orWhereDate('delivery_date', '=', $query_date);
+            });
+            $ordersQuery->when($request->get('state') != "null", function ( $q) use ($request) {
+                $q->whereHas('customer', function ($query) use ($request) {
+                    $state = $request->get('state');
+                    $query->where('state', 'Like', "%$state%");
+                });
+            });
+            $ordersQuery->when($request->get('searchByCity') !="null", function (\Illuminate\Database\Eloquent\Builder $q) use ($request) {
+                $city  =  $request->get('searchByCity');
+                
+                $q->whereHas('customer', function ($query) use ($city) {
+                    $query->where('area', 'LIKE',"%$city%");
+                });
+            });
+            $orders = $ordersQuery->get();
+    
+            $total_total_f = 0;
+            $total_paid_f = 0;
+            $total_remaining_f = 0;
+    
+            // Table Data
+            $pdf->setFont($fontname, '', 10);
+            $pdf->setFillColor(255, 255, 255);  //White for data rows
+            $fill = false; //Variable for alternating row colors
+    
+            /** @var Order $order */
+            foreach ($orders as $order) {
+                $y = $pdf->GetY();
+                $pdf->SetFillColor(255,255,255);
+            //    $pdf->Line(15, $y, $page_width + 15, $y);
+                $pdf->Cell($col , 6, $order->id, 0, 0, 'C', $fill);
+                $pdf->Cell($col , 6, $order->is_delivery ? $order?->customer?->name.' (توصيل)' : $order?->customer?->name, 0, 0, 'C', $fill);
+                $pdf->Cell($col , 6, $order?->customer?->state, 0, 0, 'C', $fill);
+                $pdf->Cell($col , 6, $order?->status, 0, 0, 'C', $fill);
+                $pdf->Cell($col , 6, $order?->customer?->phone, 0, 0, 'C', $fill);
+                $pdf->Cell($col , 6, number_format($order->totalPrice() - $order->amount_paid, 2), 0, 0, 'C', $fill);
+               $plus = $pdf->MultiCell($col, 6, $order?->notes, 0, 0, 1, 1);
+                $pdf->Line(15, $y, $page_width + 15, $y);
+    
+                $fill = !$fill;  //Toggle fill
+            }
+    
 
+            // Output the PDF
+    
+            $pdf->Output('Orders_Report_' . date('Ymd') . '.pdf', 'I');  //Filename changed.  Added date.
+    
+        }
+    
 
     public function orders(Request $request)
     {
@@ -105,7 +249,15 @@ class PDFController extends Controller
 //        dd($img);
 //        $pdf->Image($img,25,5,20,20);
         $pdf->setFont($fontname, '', 22);
-        $settings = Settings::first();
+        $settings= Settings::all()->first();
+        $img_base64_encoded =  $settings->header_base64;
+        $img = base64_decode(preg_replace('#^data:image/[^;]+;base64,#', '', $img_base64_encoded));
+        $pdf->Ln();
+        if ($settings->is_logo ){
+//            $pdf->Image("@".$img, 50 , 0, 80, 20,align: 'C',fitbox: 1);// radi
+            $pdf->Image("@".$img, 50 , 5, 80, 25,align: 'C',fitbox: 1); //اسعد
+
+        }
 
         $pdf->Cell($page_width, 5, $settings?->kitchen_name, 0, 1, 'C');
         $pdf->Cell($page_width, 5, 'الطلبات', 0, 1, 'C');

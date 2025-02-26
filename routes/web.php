@@ -25,6 +25,7 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+Route::get('/ordersAi',[\App\Http\Controllers\PDFController::class,'ordersAi']);
 Route::get('/orders',[\App\Http\Controllers\PDFController::class,'orders']);
 Route::get('/print',[\App\Http\Controllers\PDFController::class,'printSale']);
 

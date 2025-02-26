@@ -77,12 +77,28 @@ Text;
         $query->when($request->status,function (Builder $q) use ($request) {
                 $q->where('status','=',$request->status);
         });
+        $query->when($request->id,function (Builder $q) use ($request) {
+            $q->where('id','=',$request->id);
+    });
         $query->when($request->date,function (Builder $q) use ($request){
             $date = $request->date;
                 $q->whereRaw('Date(created_at) = ?',[$date]);
         });
+        $query->when($request->get('state'), function (Builder $q) use ($request) {
+            $q->whereHas('customer', function ($query) use ($request) {
+                $state = $request->get('state');
+                $query->where('state', 'Like', "%$state%");
+            });
+        });
+        $query->when($request->get('city'), function (Builder $q) use ($request) {
+            $city  =  $request->get('city');
+            
+            $q->whereHas('customer', function ($query) use ($city) {
+                $query->where('area', 'LIKE',"%$city%");
+            });
+        });
 //        return ['data'=> $query->orderByDesc('id')->paginate($page) , 'analytics'=> \DB::getQueryLog()];
-        return $query->orderByDesc('id')->paginate(1000);
+        return $query->orderByDesc('id')->paginate($page);
 
 
     }
@@ -232,7 +248,7 @@ Text;
 //            $request->order_id = $order->id;
             $pdfC->printSale($request,$order->id,true);
         }
-        if ($request->amount_paid > $order->totalPrice()){
+        if (intval($request->amount_paid ) > $order->totalPrice()){
             return response()->json(['status'=>false,'message'=>'Bad operation'],404);
         }
         if ($request->get('order_confirmed')) {
