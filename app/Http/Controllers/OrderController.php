@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 namespace App\Http\Controllers;
 
 use App\Exports\ExportOrder;
+use App\Models\BuffetOrderSelection;
+use App\Models\BuffetPackage;
 use App\Models\Deduct;
 use App\Models\Deposit;
 use App\Models\Order;
@@ -13,9 +15,11 @@ use App\Models\OrderMeal;
 use App\Models\Settings;
 use App\Models\Whatsapp;
 use Carbon\Carbon;
+use DB;
 use Hamcrest\Core\Set;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Maatwebsite\Excel\Facades\Excel;
 use PDO;
 use PHPUnit\TextUI\XmlConfiguration\Logging\TestDox\Text;
@@ -101,6 +105,106 @@ Text;
         return $query->orderByDesc('id')->paginate($page);
 
 
+    }
+    
+    /**
+     * Create a new order (handles both standard and buffet orders).
+     */
+    public function storeOrderBoffet(Request $request)
+    {
+        // Handle Buffet Order
+        if ($request->input('is_buffet_order')) {
+            return $this->storeBuffetOrder($request);
+        }
+
+        // Handle Standard (à la carte) Order (your existing logic)
+        $today = Carbon::today();
+        $user = auth()->user();
+        /** @var Order $lastOrder */
+        $lastOrder = Order::whereDate('created_at', '=', $today)->orderByDesc('id')->first();
+        $new_number = $lastOrder ? $lastOrder->order_number + 1 : 1;
+
+        $order = Order::create([
+            'order_number' => $new_number,
+            'user_id' => $user->id,
+            'delivery_date' => $today,
+            'draft' => ' '
+        ]);
+
+        return response()->json([
+            'status' => true, // Changed for consistency
+            'data' => $order->load(['mealOrders.meal', 'mealOrders'])
+        ], 201);
+    }
+
+    /**
+     * Private method to handle storing a new buffet order.
+     */
+    private function storeBuffetOrder(Request $request)
+    {
+        $validated = $request->validate([
+            'customer_id' => 'required|exists:customers,id',
+            'delivery_date' => 'required|date',
+            'delivery_time' => 'required',
+            'notes' => 'nullable|string',
+            'buffet_package_id' => 'required|exists:buffet_packages,id',
+            'buffet_person_option_id' => 'required|exists:buffet_person_options,id',
+            'selections' => 'required|array',
+            'selections.*.buffet_step_id' => 'required|exists:buffet_steps,id',
+            'selections.*.meal_id' => 'required|exists:meals,id',
+        ]);
+
+        $user = auth()->user();
+        $package = BuffetPackage::with('steps')->findOrFail($validated['buffet_package_id']);
+        $personOption = $package->personOptions()->findOrFail($validated['buffet_person_option_id']);
+        
+        // --- Validation for selections against package rules ---
+        $selectionsByStep = collect($validated['selections'])->groupBy('buffet_step_id');
+
+        foreach ($package->steps as $step) {
+            $count = $selectionsByStep->get($step->id, collect())->count();
+            if ($count < $step->min_selections || $count > $step->max_selections) {
+                throw ValidationException::withMessages([
+                    'selections' => "For step '{$step->title_ar}', you must select between {$step->min_selections} and {$step->max_selections} items. You selected {$count}."
+                ]);
+            }
+        }
+        // --- End Validation ---
+
+        $order = null;
+        DB::transaction(function () use ($validated, $user, $personOption, &$order) {
+            $today = Carbon::today();
+            $lastOrder = Order::whereDate('created_at', '=', $today)->orderByDesc('id')->first();
+            $new_number = $lastOrder ? $lastOrder->order_number + 1 : 1;
+
+            $order = Order::create([
+                'order_number' => $new_number,
+                'user_id' => $user->id,
+                'customer_id' => $validated['customer_id'],
+                'delivery_date' => $validated['delivery_date'],
+                'delivery_time' => $validated['delivery_time'],
+                'notes' => $validated['notes'],
+                'is_buffet_order' => true,
+                'buffet_package_id' => $validated['buffet_package_id'],
+                'buffet_person_option_id' => $validated['buffet_person_option_id'],
+                'buffet_base_price' => $personOption->price,
+                'amount_paid' => 0, // Or handle payment info from request
+                'totalPrice' => $personOption->price, // The base price is the total
+            ]);
+
+            foreach ($validated['selections'] as $selection) {
+                BuffetOrderSelection::create([
+                    'order_id' => $order->id,
+                    'buffet_step_id' => $selection['buffet_step_id'],
+                    'meal_id' => $selection['meal_id'],
+                ]);
+            }
+        });
+
+        return response()->json([
+            'status' => true,
+            'data' => $order->load(['customer', 'buffetPackage', 'buffetPersonOption', 'buffetSelections.meal'])
+        ], 201);
     }
     public function send(Request $request,Order $order)
     {

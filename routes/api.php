@@ -1,6 +1,11 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\BuffetAdminController;
+use App\Http\Controllers\BuffetController;
+use App\Http\Controllers\BuffetJuiceRuleAdminController;
+use App\Http\Controllers\BuffetPersonOptionAdminController;
+use App\Http\Controllers\BuffetStepAdminController;
 use App\Http\Controllers\MealController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\RequestedChildMealController;
@@ -77,3 +82,30 @@ Route::get('fileNames',[MealController::class,'getFileNamesFromPublicFolder']);
 Route::post('sendMsgWa/{order}',[\App\Http\Controllers\WaController::class,'sendMsg']);
 Route::post('sendMsgWaLocation/{order}',[\App\Http\Controllers\WaController::class,'sendLocation']);
 Route::post('sendMsgWaDocument/{order}',[\App\Http\Controllers\WaController::class,'senDocument']);
+
+
+Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
+    Route::apiResource('buffet-packages', BuffetAdminController::class);
+    
+    Route::post('/buffet-packages/{package}/person-options', [BuffetPersonOptionAdminController::class, 'store']);
+    Route::put('/buffet-person-options/{personOption}', [BuffetPersonOptionAdminController::class, 'update']);
+    Route::delete('/buffet-person-options/{personOption}', [BuffetPersonOptionAdminController::class, 'destroy']);
+
+    Route::post('/buffet-packages/{package}/steps', [BuffetStepAdminController::class, 'store']);
+    Route::put('/buffet-steps/{step}', [BuffetStepAdminController::class, 'update']);
+    Route::delete('/buffet-steps/{step}', [BuffetStepAdminController::class, 'destroy']);
+
+    Route::post('/buffet-person-options/{personOption}/juice-rule', [BuffetJuiceRuleAdminController::class, 'storeOrUpdate']);
+});
+
+    // New Route for managing the juice rule FOR a person option
+    Route::post('/buffet-person-options/{personOption}/juice-rule', [BuffetJuiceRuleAdminController::class, 'storeOrUpdate']);
+// --- New Buffet Configuration Routes ---
+Route::prefix('buffet')->group(function () {
+    Route::get('/packages', [BuffetController::class, 'getPackages']);
+    Route::get('/packages/{package}/person-options', [BuffetController::class, 'getPersonOptions']);
+    Route::get('/packages/{package}/steps', [BuffetController::class, 'getSteps']);
+    Route::get('/person-options/{personOption}/juice-info', [BuffetController::class, 'getJuiceInfo']);
+    Route::apiResource('buffet-packages', BuffetAdminController::class);
+
+});
