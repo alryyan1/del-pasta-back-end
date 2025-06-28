@@ -19,27 +19,27 @@ class BuffetController extends Controller
     /**
      * Get the person/price options for a specific package.
      */
-    public function getPersonOptions(BuffetPackage $package)
+    public function getPersonOptions(BuffetPackage $buffet_package)
     {
-        return $package->personOptions()->where('is_active', true)->get();
+        return $buffet_package->personOptions()->where('is_active', true)->get();
     }
 
     /**
      * Get the configurable steps for a specific package.
      * Eager loads the category and its meals for each step.
      */
-    public function getSteps(BuffetPackage $package)
+        public function getSteps(BuffetPackage $buffet_package)
     {
         // The BuffetStep model has 'with' => ['category.meals'], so this is efficient.
-        return $package->steps()->where('is_active', true)->get();
+        return $buffet_package->steps()->where('is_active', true)->get();
     }
 
     /**
      * Get the juice rule/description for a specific person option.
      */
-    public function getJuiceInfo(BuffetPersonOption $personOption)
+    public function getJuiceInfo(BuffetPersonOption $buffet_person_option)
     {
         // Use the relationship defined in the BuffetPersonOption model
-        return $personOption->juiceRule;
+        return $buffet_person_option->juiceRule;
     }
 }

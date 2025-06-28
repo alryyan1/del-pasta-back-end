@@ -29,13 +29,13 @@ class BuffetAdminController extends Controller
     }
 
     // Get a single package for editing
-    public function show(BuffetPackage $package)
+    public function show(BuffetPackage $buffet_package)
     {
-        return $package;
+        return $buffet_package->load('personOptions', 'steps','juiceRules');
     }
 
     // Update a package
-    public function update(Request $request, BuffetPackage $package)
+    public function update(Request $request, BuffetPackage $buffet_package)
     {
         $validated = $request->validate([
             'name_ar' => 'required|string|max:255',
@@ -44,14 +44,14 @@ class BuffetAdminController extends Controller
             'is_active' => 'boolean',
         ]);
 
-        $package->update($validated);
-        return response()->json($package);
+        $buffet_package->update($validated);
+        return response()->json($buffet_package);
     }
 
     // Delete a package
-    public function destroy(BuffetPackage $package)
+    public function destroy(BuffetPackage $buffet_package)
     {
-        $package->delete();
+        $buffet_package->delete();
         return response()->json(['message' => 'Package deleted successfully'], 200);
     }
 }
