@@ -12,7 +12,9 @@ return new class extends Migration
     {
         Schema::create('buffet_order_selections', function (Blueprint $table) {
             $table->id();
-            $table->foreignIdFor(Order::class)->constrained()->cascadeOnDelete();
+            $table->renameColumn('order_id', 'buffet_order_id');
+            // Add the new foreign key constraint
+            $table->foreign('buffet_order_id')->references('id')->on('buffet_orders')->cascadeOnDelete();
             $table->foreignId('buffet_step_id')->constrained('buffet_steps')->cascadeOnDelete();
             $table->foreignIdFor(Meal::class)->constrained()->cascadeOnDelete();
             // $table->unsignedInteger('quantity')->default(1); // Not explicitly needed per user story for buffet items, but could be added.

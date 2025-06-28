@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Exports\ExportOrder;
 use App\Models\BuffetOrderSelection;
 use App\Models\BuffetPackage;
+use App\Models\BuffetPersonOption;
 use App\Models\Deduct;
 use App\Models\Deposit;
 use App\Models\Order;
@@ -137,76 +138,9 @@ Text;
         ], 201);
     }
 
-    /**
-     * Private method to handle storing a new buffet order.
-     */
-    private function storeBuffetOrder(Request $request)
-    {
-        $validated = $request->validate([
-            'customer_id' => 'required|exists:customers,id',
-            'delivery_date' => 'required|date',
-            'delivery_time' => 'required',
-            'notes' => 'nullable|string',
-            'buffet_package_id' => 'required|exists:buffet_packages,id',
-            'buffet_person_option_id' => 'required|exists:buffet_person_options,id',
-            'selections' => 'required|array',
-            'selections.*.buffet_step_id' => 'required|exists:buffet_steps,id',
-            'selections.*.meal_id' => 'required|exists:meals,id',
-        ]);
+ 
 
-        $user = auth()->user();
-        $package = BuffetPackage::with('steps')->findOrFail($validated['buffet_package_id']);
-        $personOption = $package->personOptions()->findOrFail($validated['buffet_person_option_id']);
-        
-        // --- Validation for selections against package rules ---
-        $selectionsByStep = collect($validated['selections'])->groupBy('buffet_step_id');
-
-        foreach ($package->steps as $step) {
-            $count = $selectionsByStep->get($step->id, collect())->count();
-            if ($count < $step->min_selections || $count > $step->max_selections) {
-                throw ValidationException::withMessages([
-                    'selections' => "For step '{$step->title_ar}', you must select between {$step->min_selections} and {$step->max_selections} items. You selected {$count}."
-                ]);
-            }
-        }
-        // --- End Validation ---
-
-        $order = null;
-        DB::transaction(function () use ($validated, $user, $personOption, &$order) {
-            $today = Carbon::today();
-            $lastOrder = Order::whereDate('created_at', '=', $today)->orderByDesc('id')->first();
-            $new_number = $lastOrder ? $lastOrder->order_number + 1 : 1;
-
-            $order = Order::create([
-                'order_number' => $new_number,
-                'user_id' => $user->id,
-                'customer_id' => $validated['customer_id'],
-                'delivery_date' => $validated['delivery_date'],
-                'delivery_time' => $validated['delivery_time'],
-                'notes' => $validated['notes'],
-                'is_buffet_order' => true,
-                'buffet_package_id' => $validated['buffet_package_id'],
-                'buffet_person_option_id' => $validated['buffet_person_option_id'],
-                'buffet_base_price' => $personOption->price,
-                'amount_paid' => 0, // Or handle payment info from request
-                'totalPrice' => $personOption->price, // The base price is the total
-            ]);
-
-            foreach ($validated['selections'] as $selection) {
-                BuffetOrderSelection::create([
-                    'order_id' => $order->id,
-                    'buffet_step_id' => $selection['buffet_step_id'],
-                    'meal_id' => $selection['meal_id'],
-                ]);
-            }
-        });
-
-        return response()->json([
-            'status' => true,
-            'data' => $order->load(['customer', 'buffetPackage', 'buffetPersonOption', 'buffetSelections.meal'])
-        ], 201);
-    }
-    public function send(Request $request,Order $order)
+     public function send(Request $request,Order $order)
     {
         if ($order->customer == null){
             return response()->json(['status'=>false,'message'=>'Customer Must Be Selected'],404);
@@ -300,20 +234,27 @@ Text;
         }
     }
 
-    // Create a new order
+   
     public function store(Request $request)
     {
         $today = Carbon::today();
         $user = auth()->user();
-        /** @var Order $lastOrder */
+        
         $lastOrder = Order::whereDate('created_at', '=', $today)->orderByDesc('id')->first();
-        $new_number = 1;
-        if ($lastOrder) {
-            $new_number = $lastOrder->order_number + 1;
-        }
-        $order = Order::create(['order_number' => $new_number, 'user_id' => $user->id,'delivery_date'=>$today,'draft'=>' ']);
+        $new_number = $lastOrder ? $lastOrder->order_number + 1 : 1;
 
-        return response()->json(['status' => $order, 'data' => $order->load(['mealOrders.meal','mealOrders'])], 201,);
+        $order = Order::create([
+            'order_number' => $new_number,
+            'user_id' => $user->id,
+            'delivery_date' => $today,
+            'status' => 'pending', // Sensible default
+            'draft' => ' '
+        ]);
+
+        return response()->json([
+            'status' => true,
+            'data' => $order->load(['mealOrders.meal', 'customer'])
+        ], 201);
     }
 
     // Update order status
@@ -406,6 +347,123 @@ Text;
     public function exportExcel()
     {
         return Excel::download(new ExportOrder, 'orders.xlsx');
+    }
+
+      /**
+     * Private method to handle storing a new buffet order.
+     */
+    private function storeBuffetOrder(Request $request)
+    {
+        $validated = $request->validate([
+            'customer_id' => 'required|exists:customers,id',
+            'delivery_date' => 'required|date',
+            'delivery_time' => 'required',
+            'notes' => 'nullable|string',
+            'buffet_package_id' => 'required|exists:buffet_packages,id',
+            'buffet_person_option_id' => 'required|exists:buffet_person_options,id',
+            'selections' => 'required|array',
+            'selections.*.buffet_step_id' => 'required|exists:buffet_steps,id',
+            'selections.*.meal_id' => 'required|exists:meals,id',
+        ]);
+
+        $package = BuffetPackage::with('steps')->findOrFail($validated['buffet_package_id']);
+        $personOption = BuffetPersonOption::findOrFail($validated['buffet_person_option_id']);
+        
+        $selectionsByStep = collect($validated['selections'])->groupBy('buffet_step_id');
+
+        foreach ($package->steps as $step) {
+            $count = $selectionsByStep->get($step->id, collect())->count();
+            if ($count < $step->min_selections || $count > $step->max_selections) {
+                throw ValidationException::withMessages([
+                    'selections' => "For step '{$step->title_ar}', you must select between {$step->min_selections} and {$step->max_selections} items. You selected {$count}."
+                ]);
+            }
+        }
+        
+        $order = null;
+        DB::transaction(function () use ($validated, $personOption, &$order) {
+            $today = Carbon::today();
+            $user = auth()->user();
+            $lastOrder = Order::whereDate('created_at', '=', $today)->orderByDesc('id')->first();
+            $new_number = $lastOrder ? $lastOrder->order_number + 1 : 1;
+
+            $order = Order::create([
+                'order_number' => $new_number,
+                'user_id' => $user->id,
+                'customer_id' => $validated['customer_id'],
+                'delivery_date' => $validated['delivery_date'],
+                'delivery_time' => $validated['delivery_time'],
+                'notes' => $validated['notes'],
+                'is_buffet_order' => true,
+                'buffet_package_id' => $validated['buffet_package_id'],
+                'buffet_person_option_id' => $validated['buffet_person_option_id'],
+                'buffet_base_price' => $personOption->price,
+                'amount_paid' => 0, 
+                'draft' => ' -'
+            ]);
+
+            foreach ($validated['selections'] as $selection) {
+                BuffetOrderSelection::create([
+                    'order_id' => $order->id,
+                    'buffet_step_id' => $selection['buffet_step_id'],
+                    'meal_id' => $selection['meal_id'],
+                ]);
+            }
+        });
+
+        if ($order) {
+            try {
+                $order->load(['customer', 'buffetPackage', 'buffetPersonOption', 'buffetSelections.meal', 'buffetSelections.buffetStep']);
+                $message = $this->formatBuffetOrderForWhatsapp($order);
+                $restaurantPhone = '78622990'; 
+                Whatsapp::sendMsgWb($restaurantPhone, $message);
+            } catch (\Exception $e) {
+                \Log::error('Failed to send WhatsApp notification for order ID ' . $order->id . ': ' . $e->getMessage());
+            }
+        }
+
+        return response()->json([
+            'status' => true,
+            'data' => $order
+        ], 201);
+    }
+
+    /**
+     * Formats the buffet order details into a string for WhatsApp.
+     */
+    private function formatBuffetOrderForWhatsapp(Order $order): string
+    {
+        $nl = "\n";
+        $message  = "*طلب بوفيه جديد تلقائي*" . $nl . $nl;
+        $message .= "----------------------------------" . $nl;
+        $message .= "*رقم الطلب:* " . $order->order_number . $nl;
+        $message .= "*الباقة:* " . $order->buffetPackage->name_ar . $nl;
+        $message .= "*عدد الأشخاص:* " . $order->buffetPersonOption->label_ar . $nl;
+        $message .= "*السعر الأساسي:* " . number_format($order->buffet_base_price, 3) . " OMR" . $nl . $nl;
+
+        $message .= "*بيانات العميل:*" . $nl;
+        $message .= "- *الاسم:* " . $order->customer->name . $nl;
+        $message .= "- *الهاتف:* " . $order->customer->phone . $nl;
+        $message .= "*تاريخ ووقت التسليم:*" . $nl . Carbon::parse($order->delivery_date)->format('d-m-Y') . " @ " . Carbon::parse($order->delivery_time)->format('h:i A') . $nl . $nl;
+
+        $message .= "----------------------------------" . $nl;
+        $message .= "*الاختيارات:*" . $nl;
+
+        $selectionsByStep = $order->buffetSelections->groupBy('buffetStep.title_ar');
+
+        foreach ($selectionsByStep as $stepTitle => $selections) {
+            $message .= $nl . "*" . $stepTitle . "*:" . $nl;
+            foreach ($selections as $selection) {
+                $message .= "- " . $selection->meal->name . $nl;
+            }
+        }
+        
+        if (!empty($order->notes)) {
+            $message .= $nl . "----------------------------------" . $nl;
+            $message .= "*ملاحظات إضافية:*" . $nl . $order->notes;
+        }
+
+        return $message;
     }
 
 }

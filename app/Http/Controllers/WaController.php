@@ -42,6 +42,56 @@ class WaController extends Controller
             }
         }
     }
+
+    /**
+     * Send a text message to any phone number via WhatsApp API
+     * 
+     * @param string $phone The phone number to send the message to
+     * @param string $message The message content to send
+     * @return array|string Response from the API or error message
+     */
+    public function sendTextMessage($phone, $message)
+    {
+        $client = new \GuzzleHttp\Client();
+        
+        try {
+            $response = $client->post('https://waapi.app/api/v1/instances/45517/client/action/send-message', [
+                'body' => json_encode([
+                    'message' => $message,
+                    'chatId' => '968' . $phone . '@c.us',
+                ]),
+                'headers' => [
+                    'accept' => 'application/json',
+                    'authorization' => 'Bearer OLadVOVB1icipXDDGdOVwgK1MvMnLg9Lrp3JjDNJ112e02ce',
+                    'content-type' => 'application/json',
+                ],
+            ]);
+            
+            $body = $response->getBody()->getContents();
+            $responseData = json_decode($body);
+            
+            return [
+                'success' => true,
+                'response' => $responseData,
+                'message' => $responseData->status ?? 'Message sent successfully'
+            ];
+            
+        } catch (RequestException $e) {
+            if ($e->hasResponse()) {
+                $error = $e->getResponse()->getBody()->getContents();
+                return [
+                    'success' => false,
+                    'error' => "API Error: " . $error
+                ];
+            } else {
+                return [
+                    'success' => false,
+                    'error' => "Connection Error: " . $e->getMessage()
+                ];
+            }
+        }
+    }
+
     public function sendLocation(Request $request,Order $order)
     {
 

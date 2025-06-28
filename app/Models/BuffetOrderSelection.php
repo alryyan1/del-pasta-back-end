@@ -30,4 +30,8 @@ class BuffetOrderSelection extends Model
     {
         return $this->belongsTo(Meal::class);
     }
+    public function buffetOrder()
+    {
+        return $this->belongsTo(BuffetOrder::class);
+    }
 }

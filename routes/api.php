@@ -15,6 +15,7 @@ use App\Http\Controllers\BuffetAdminController;
 use App\Http\Controllers\BuffetPersonOptionAdminController;
 use App\Http\Controllers\BuffetStepAdminController;
 use App\Http\Controllers\BuffetJuiceRuleAdminController;
+use App\Http\Controllers\BuffetOrderController;
 
 /*
 |--------------------------------------------------------------------------
@@ -69,46 +70,51 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- Other Authenticated Routes ---
     Route::post('/categories', [\App\Http\Controllers\CategoryController::class, 'store']);
     Route::apiResource('orders', OrderController::class);
+
+    Route::apiResource('orders', OrderController::class);
+
+    // NEW Dedicated route for buffet orders
+    Route::apiResource('buffet-orders', BuffetOrderController::class);
+   // --- OTHER EXISTING ROUTES ---
+   Route::get('users', [AuthController::class, 'users']);
+   Route::apiResource('meals', MealController::class);
+   Route::apiResource('costs', \App\Http\Controllers\CostController::class);
+   Route::apiResource('CostCategories', \App\Http\Controllers\CostCategoryController::class);
+   Route::apiResource('orderMeals', \App\Http\Controllers\OrderMealsController::class);
+   Route::post('RequestedChild/{orderMeal}', [RequestedChildMealController::class, 'store']);
+   Route::patch('RequestedChild/{requestedChildMeal}', [RequestedChildMealController::class, 'update']);
+   Route::post('RequestedChildAddAll/{orderMeal}', [RequestedChildMealController::class, 'storeAll']);
+   Route::get('ordersInfoGraphic', [\App\Http\Controllers\OrderMealsController::class, 'ordersInfoGraphic']);
+   Route::apiResource('customers', \App\Http\Controllers\CustomerController::class);
+   Route::get('info', [\App\Http\Controllers\CustomerController::class, 'info']);
+   Route::apiResource('reservations', ReservationController::class);
+   Route::apiResource('childMeals', \App\Http\Controllers\ChildMealController::class);
+   Route::post('settings', [SettingsController::class, 'update']);
+   Route::get('settings', [SettingsController::class, 'index']);
+   Route::get('services', [\App\Http\Controllers\ServiceController::class, 'index']);
+   Route::patch('services/{service}', [\App\Http\Controllers\ServiceController::class, 'update']);
+   Route::post('services', [\App\Http\Controllers\ServiceController::class, 'store']);
+   Route::post('defineServices/{meal}', [\App\Http\Controllers\ServiceController::class, 'defineServices']);
+   Route::get('categories', [\App\Http\Controllers\CategoryController::class, 'index']);
+   Route::patch('categories/{category}', [\App\Http\Controllers\CategoryController::class, 'update']);
+   Route::post('orderConfirmed/{order}', [OrderController::class, 'orderConfirmed']);
+   Route::post('orders/pagination/{page}', [OrderController::class, 'pagination']);
+   Route::get('orders/pagination/{page}', [OrderController::class, 'pagination']);
+   Route::get('/printSale', [\App\Http\Controllers\PDFController::class, 'printSale']);
+   Route::post('orderMealsStats', [OrderController::class, 'orderMealsStats']);
+   Route::post('send/{order}', [OrderController::class, 'send']);
+   Route::post('sendMsg/{order}', [OrderController::class, 'sendMsg']);
+   Route::post('deposits', [\App\Http\Controllers\DepositController::class, 'store']);
+   Route::post('deducts/{order}', [\App\Http\Controllers\DeductController::class, 'store']);
+   Route::get('arrival', [OrderController::class, 'arrival']);
+   Route::patch('arrival/{order}', [OrderController::class, 'notify']);
+   Route::get('orderById/{order}', [OrderController::class, 'orderById']);
+   Route::post('saveImage/{meal}', [MealController::class, 'saveImage']);
+   Route::get('fileNames', [MealController::class, 'getFileNamesFromPublicFolder']);
+   Route::post('sendMsgWa/{order}', [\App\Http\Controllers\WaController::class, 'sendMsg']);
+   Route::post('sendMsgWaLocation/{order}', [\App\Http\Controllers\WaController::class, 'sendLocation']);
+   Route::post('sendMsgWaDocument/{order}', [\App\Http\Controllers\WaController::class, 'senDocument']);
     // ... other authenticated routes
 });
 
-
-// --- OTHER EXISTING ROUTES ---
-Route::get('users', [AuthController::class, 'users']);
-Route::apiResource('meals', MealController::class);
-Route::apiResource('costs', \App\Http\Controllers\CostController::class);
-Route::apiResource('CostCategories', \App\Http\Controllers\CostCategoryController::class);
-Route::apiResource('orderMeals', \App\Http\Controllers\OrderMealsController::class);
-Route::post('RequestedChild/{orderMeal}', [RequestedChildMealController::class, 'store']);
-Route::patch('RequestedChild/{requestedChildMeal}', [RequestedChildMealController::class, 'update']);
-Route::post('RequestedChildAddAll/{orderMeal}', [RequestedChildMealController::class, 'storeAll']);
-Route::get('ordersInfoGraphic', [\App\Http\Controllers\OrderMealsController::class, 'ordersInfoGraphic']);
-Route::apiResource('customers', \App\Http\Controllers\CustomerController::class);
-Route::get('info', [\App\Http\Controllers\CustomerController::class, 'info']);
-Route::apiResource('reservations', ReservationController::class);
-Route::apiResource('childMeals', \App\Http\Controllers\ChildMealController::class);
-Route::post('settings', [SettingsController::class, 'update']);
-Route::get('settings', [SettingsController::class, 'index']);
-Route::get('services', [\App\Http\Controllers\ServiceController::class, 'index']);
-Route::patch('services/{service}', [\App\Http\Controllers\ServiceController::class, 'update']);
-Route::post('services', [\App\Http\Controllers\ServiceController::class, 'store']);
-Route::post('defineServices/{meal}', [\App\Http\Controllers\ServiceController::class, 'defineServices']);
-Route::get('categories', [\App\Http\Controllers\CategoryController::class, 'index']);
-Route::patch('categories/{category}', [\App\Http\Controllers\CategoryController::class, 'update']);
-Route::post('orderConfirmed/{order}', [OrderController::class, 'orderConfirmed']);
-Route::post('orders/pagination/{page}', [OrderController::class, 'pagination']);
-Route::get('orders/pagination/{page}', [OrderController::class, 'pagination']);
-Route::get('/printSale', [\App\Http\Controllers\PDFController::class, 'printSale']);
-Route::post('orderMealsStats', [OrderController::class, 'orderMealsStats']);
-Route::post('send/{order}', [OrderController::class, 'send']);
-Route::post('sendMsg/{order}', [OrderController::class, 'sendMsg']);
-Route::post('deposits', [\App\Http\Controllers\DepositController::class, 'store']);
-Route::post('deducts/{order}', [\App\Http\Controllers\DeductController::class, 'store']);
-Route::get('arrival', [OrderController::class, 'arrival']);
-Route::patch('arrival/{order}', [OrderController::class, 'notify']);
-Route::get('orderById/{order}', [OrderController::class, 'orderById']);
-Route::post('saveImage/{meal}', [MealController::class, 'saveImage']);
-Route::get('fileNames', [MealController::class, 'getFileNamesFromPublicFolder']);
-Route::post('sendMsgWa/{order}', [\App\Http\Controllers\WaController::class, 'sendMsg']);
-Route::post('sendMsgWaLocation/{order}', [\App\Http\Controllers\WaController::class, 'sendLocation']);
-Route::post('sendMsgWaDocument/{order}', [\App\Http\Controllers\WaController::class, 'senDocument']);
+ // OLD Order Route. The store method is now only for standard orders.
