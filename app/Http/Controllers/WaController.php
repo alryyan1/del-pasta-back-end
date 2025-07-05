@@ -9,6 +9,42 @@ use Illuminate\Http\Request;
 
 class WaController extends Controller
 {
+    /**
+     * Test WhatsApp API functionality
+     */
+    public function test(Request $request)
+    {
+        $validated = $request->validate([
+            'phone' => 'required|string|max:20',
+            'message' => 'required|string|max:1000',
+        ]);
+
+        $phone = $validated['phone'];
+        $message = $validated['message'];
+
+        try {
+            $result = $this->sendTextMessage($phone, $message);
+            
+            if ($result['success']) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'WhatsApp message sent successfully',
+                    'response' => $result['response']
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'error' => $result['error']
+                ], 400);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to send WhatsApp message: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function sendMsg(Request $request,Order $order)
     {
         $meals_names = $order->orderMealsNames();
@@ -62,7 +98,7 @@ class WaController extends Controller
                 ]),
                 'headers' => [
                     'accept' => 'application/json',
-                    'authorization' => 'Bearer OLadVOVB1icipXDDGdOVwgK1MvMnLg9Lrp3JjDNJ112e02ce',
+                    'authorization' => 'Bearer Maqy0Gz17O85xDrGvO8tIv2ualnsjPkECcp2cX7edba8b883',
                     'content-type' => 'application/json',
                 ],
             ]);

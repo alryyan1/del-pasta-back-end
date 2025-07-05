@@ -36,6 +36,9 @@ class Handler extends ExceptionHandler
                 return response()->json([
                      'show'=>true,
                     'status_code' => 401,
+                    'line'=>$e->getLine(),
+                    'file'=>$e->getFile(),
+                    'trace'=>$e->getTraceAsString(),
                     'success' => false,
                     'message' => 'Unauthenticated.'
                 ], 401);

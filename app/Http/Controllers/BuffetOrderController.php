@@ -15,24 +15,40 @@ use Illuminate\Validation\ValidationException;
 
 class BuffetOrderController extends Controller
 {
-    /**
-     * Display a paginated listing of the buffet orders.
-     * Ideal for an admin panel.
-     */
     public function index(Request $request)
     {
-        // Start query with eager loaded relationships for efficiency
         $query = BuffetOrder::with(['customer', 'buffetPackage', 'buffetPersonOption'])
             ->orderBy('delivery_date', 'desc')
             ->orderBy('delivery_time', 'desc');
-
-        // Example for future filtering capabilities
-        // $query->when($request->status, fn($q, $status) => $q->where('status', $status));
-        // $query->when($request->date, fn($q, $date) => $q->whereDate('delivery_date', $date));
-
-        return $query->paginate(15);
+    
+        // Filter by customer name or phone
+        $query->when($request->search, function ($q, $search) {
+            $q->whereHas('customer', function ($customerQuery) use ($search) {
+                $customerQuery->where('name', 'like', "%{$search}%")
+                              ->orWhere('phone', 'like', "%{$search}%");
+            });
+        });
+        
+        // Filter by customer state
+        $query->when($request->state, function ($q, $state) {
+            $q->whereHas('customer', function ($customerQuery) use ($state) {
+                $customerQuery->where('state', 'like', "%{$state}%");
+            });
+        });
+    
+        // Filter by delivery date
+        $query->when($request->date, function ($q, $date) {
+            // Ensure date is valid before using it
+            try {
+                $formattedDate = Carbon::parse($date)->format('Y-m-d');
+                $q->whereDate('delivery_date', $formattedDate);
+            } catch (\Exception $e) {
+                // Ignore invalid date formats
+            }
+        });
+    
+        return $query->orderBy('id', 'desc')->paginate(15);
     }
-
     /**
      * Store a newly created buffet order.
      * Handles creating a new customer if they don't exist.
@@ -43,6 +59,7 @@ class BuffetOrderController extends Controller
             'customer' => 'required|array',
             'customer.name' => 'required|string|max:255',
             'customer.phone' => 'required|string|max:20',
+            'customer.address' => 'nullable|string|max:255', // Add validation for the new address field
 
             'delivery_date' => 'required|date_format:Y-m-d',
             'delivery_time' => 'required|date_format:H:i',
@@ -74,7 +91,7 @@ class BuffetOrderController extends Controller
             // Find an existing customer by phone number, or create a new one.
             $customer = Customer::firstOrCreate(
                 ['phone' => $validated['customer']['phone']],
-                ['name' => $validated['customer']['name']]
+                ['name' => $validated['customer']['name'], 'address' => $validated['customer']['address']]
             );
 
             // Generate a unique order number

@@ -14,7 +14,8 @@ return new class extends Migration
         Schema::create('categories', function (Blueprint $table) {
             $table->id();
             $table->string('name');
-            $table->longText('image');
+            $table->longText('image')->nullable(); // Base64 image data
+            $table->string('image_url')->nullable(); // Processed image filename
         });
     }
 

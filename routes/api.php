@@ -16,6 +16,7 @@ use App\Http\Controllers\BuffetPersonOptionAdminController;
 use App\Http\Controllers\BuffetStepAdminController;
 use App\Http\Controllers\BuffetJuiceRuleAdminController;
 use App\Http\Controllers\BuffetOrderController;
+use App\Http\Controllers\OnlineOrderController;
 
 /*
 |--------------------------------------------------------------------------
@@ -68,13 +69,11 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // --- Other Authenticated Routes ---
-    Route::post('/categories', [\App\Http\Controllers\CategoryController::class, 'store']);
     Route::apiResource('orders', OrderController::class);
-
+    
     Route::apiResource('orders', OrderController::class);
 
     // NEW Dedicated route for buffet orders
-    Route::apiResource('buffet-orders', BuffetOrderController::class);
    // --- OTHER EXISTING ROUTES ---
    Route::get('users', [AuthController::class, 'users']);
    Route::apiResource('meals', MealController::class);
@@ -95,7 +94,6 @@ Route::middleware('auth:sanctum')->group(function () {
    Route::patch('services/{service}', [\App\Http\Controllers\ServiceController::class, 'update']);
    Route::post('services', [\App\Http\Controllers\ServiceController::class, 'store']);
    Route::post('defineServices/{meal}', [\App\Http\Controllers\ServiceController::class, 'defineServices']);
-   Route::get('categories', [\App\Http\Controllers\CategoryController::class, 'index']);
    Route::patch('categories/{category}', [\App\Http\Controllers\CategoryController::class, 'update']);
    Route::post('orderConfirmed/{order}', [OrderController::class, 'orderConfirmed']);
    Route::post('orders/pagination/{page}', [OrderController::class, 'pagination']);
@@ -114,7 +112,30 @@ Route::middleware('auth:sanctum')->group(function () {
    Route::post('sendMsgWa/{order}', [\App\Http\Controllers\WaController::class, 'sendMsg']);
    Route::post('sendMsgWaLocation/{order}', [\App\Http\Controllers\WaController::class, 'sendLocation']);
    Route::post('sendMsgWaDocument/{order}', [\App\Http\Controllers\WaController::class, 'senDocument']);
+   
+   // WhatsApp Testing Route
+   Route::post('whatsapp/test', [\App\Http\Controllers\WaController::class, 'test']);
+   
+   Route::get('settings', [SettingsController::class, 'index']);
+   Route::post('settings', [SettingsController::class, 'update']); // This now points to the new update method
+
+
     // ... other authenticated routes
 });
 
  // OLD Order Route. The store method is now only for standard orders.
+ Route::apiResource('buffet-orders', BuffetOrderController::class);
+
+    // Category resource routes
+    Route::apiResource('categories', \App\Http\Controllers\CategoryController::class);
+    
+    // Additional category routes
+    Route::get('categories/images', [\App\Http\Controllers\CategoryController::class, 'getImages']);
+    Route::post('categories/{category}/upload-image', [\App\Http\Controllers\CategoryController::class, 'uploadImage']);
+
+// --- Online Food Ordering Routes ---
+// This is a public route for customers to place orders.
+Route::post('/online-orders', [OnlineOrderController::class, 'store']);
+
+// This route is for the success page to fetch the details of the order it just created.
+Route::get('/online-orders/{foodOrder}', [OnlineOrderController::class, 'show']);
