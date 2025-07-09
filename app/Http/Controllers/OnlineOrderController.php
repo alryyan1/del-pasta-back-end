@@ -94,22 +94,57 @@ class OnlineOrderController extends Controller
     private function formatOrderForWhatsapp(FoodOrder $order): string
     {
         $nl = "\n"; // Newline character
-        $message  = "*طلب أونلاين جديد*" . $nl . $nl;
-        $message .= "*رقم الطلب:* " . $order->order_number . $nl;
-        $message .= "*العميل:* " . $order->customer_name . $nl;
+        
+        // 1. طلب جديد
+        $message = "*طلب جديد*" . $nl . $nl;
+        
+        // 2. اسم المطعم وهو DEL-PASTA
+        $message .= "*اسم المطعم:* DEL-PASTA" . $nl;
+        
+        // 3. رقم الطلب الـ هو ID
+        $message .= "*رقم الطلب:* " . $order->id . $nl;
+        
+        // 4. اسم العميل
+        $message .= "*اسم العميل:* " . $order->customer_name . $nl;
+        
+        // 5. الهاتف
         $message .= "*الهاتف:* " . $order->customer_phone . $nl;
-        if($order->customer_address) {
-            $message .= "*العنوان:* " . $order->customer_address . $nl;
+        
+        // 6. Address handling based on order type
+        if ($order->order_type === 'delivery') {
+            // Show "توصيل الي" with address details
+            $addressParts = array_filter([
+                $order->customer_address,
+                $order->area,
+                $order->state
+            ]);
+            $fullAddress = implode(', ', $addressParts);
+            
+            if ($fullAddress) {
+                $message .= "*توصيل إلى:* " . $fullAddress . $nl;
+            }
+        } else {
+            // For pickup, just show address if available
+            if ($order->customer_address) {
+                $message .= "*العنوان:* " . $order->customer_address . $nl;
+            }
         }
+        
         $message .= "-----------------" . $nl;
+        
+        // 7. الطلبات
         $message .= "*الطلبات:*" . $nl;
-
         foreach ($order->items as $item) {
             $message .= "*- (" . $item->quantity . "x) " . $item->meal->name . "*" . $nl;
         }
         
         $message .= "-----------------" . $nl;
-        $message .= "*الإجمالي:* " . number_format($order->total_price, 3) . " OMR" . $nl;
+        
+        // 8. الإجمالي
+        $message .= "*الإجمالي:* " . number_format($order->total_price, 3) . " OMR" . $nl . $nl;
+        
+        // 9. طلبكم محل اهتمامنا
+        $message .= "*طلبكم محل اهتمامنا* 🌟";
 
         return $message;
     }
