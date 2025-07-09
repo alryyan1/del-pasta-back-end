@@ -20,7 +20,11 @@ class FoodOrder extends Model
         'customer_phone',
         'customer_address',
         'total_price',
+        'delivery_fee',
         'status',
+        'order_type',
+        'state',
+        'area',
     ];
 
     /**

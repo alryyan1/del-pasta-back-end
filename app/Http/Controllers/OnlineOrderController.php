@@ -24,6 +24,9 @@ class OnlineOrderController extends Controller
             'items.*.id' => 'required|exists:meals,id',
             'items.*.quantity' => 'required|integer|min:1',
             'items.*.price' => 'required|numeric|min:0',
+            'order_type' => 'required|string|in:pickup,delivery',
+            'state' => 'nullable|string',
+            'area' => 'nullable|string',
         ]);
 
         $order = null;
@@ -44,6 +47,9 @@ class OnlineOrderController extends Controller
                 'customer_address' => $validated['customer']['address'],
                 'total_price' => $totalPrice,
                 'status' => 'pending',
+                'order_type' => $validated['order_type'],
+                'state' => $validated['state'],
+                'area' => $validated['area'],
             ]);
 
             // Create the associated order items
@@ -76,14 +82,12 @@ class OnlineOrderController extends Controller
     }
 
     /**
-     * Display the specified resource for the success page.
+     * Display the specified resource.
      */
-    public function show(FoodOrder $foodOrder)
+    public function show(FoodOrder $online_order)
     {
-        // Return the order with its items and the meal details for each item
-        return response()->json(['data' => $foodOrder->load('items.meal')]);
+        return response()->json(['data' => $online_order->load('items.meal')]);
     }
-
     /**
      * Helper method to format the order details into a WhatsApp-friendly message.
      */
@@ -106,6 +110,86 @@ class OnlineOrderController extends Controller
         
         $message .= "-----------------" . $nl;
         $message .= "*الإجمالي:* " . number_format($order->total_price, 3) . " OMR" . $nl;
+
+        return $message;
+    }
+    /**
+     * Display a paginated listing of the resource.
+     */
+    public function index(Request $request)
+    {
+        $query = FoodOrder::with('items.meal') // Eager load items and their meal details
+            ->orderBy('created_at', 'desc');
+
+        // Add filtering logic
+        if ($request->has('search')) {
+            $searchTerm = $request->search;
+            $query->where(function($q) use ($searchTerm) {
+                $q->where('order_number', 'LIKE', "%{$searchTerm}%")
+                  ->orWhere('customer_name', 'LIKE', "%{$searchTerm}%")
+                  ->orWhere('customer_phone', 'LIKE', "%{$searchTerm}%");
+            });
+        }
+
+        return $query->paginate(15);
+    }
+
+ /**
+     * Update the status and/or delivery fee of the specified order.
+     */
+    public function update(Request $request, FoodOrder $online_order)
+    {
+        // Debug logging
+        Log::info('OnlineOrder Update Request', [
+            'order_id' => $online_order->id,
+            'request_data' => $request->all(),
+            'url' => $request->fullUrl()
+        ]);
+        
+        $validated = $request->validate([
+            'status' => 'sometimes|required|string|in:pending,confirmed,preparing,delivered,cancelled',
+            'delivery_fee' => 'sometimes|required|numeric|min:0',
+        ]);
+
+        $originalStatus = $online_order->status;
+        $online_order->update($validated);
+
+        // If status is changed to 'confirmed', send the payment request message.
+        // We use 'confirmed' as the trigger status.
+        if (isset($validated['status']) && $validated['status'] === 'confirmed' && $originalStatus !== 'confirmed') {
+            try {
+                $paymentMessage = $this->formatPaymentRequestMessage($online_order);
+                $waController = new WaController();
+                $waController->sendTextMessage($online_order->customer_phone, $paymentMessage);
+            } catch (\Exception $e) {
+                Log::error('WhatsApp payment request failed for Order ID ' . $online_order->id . ': ' . $e->getMessage());
+            }
+        }
+
+        return response()->json(['status' => true, 'order' => $online_order]);
+    }
+     /**
+     * Remove the specified resource from storage.
+     */
+        public function destroy(FoodOrder $online_order)
+    {
+        $online_order->delete();
+        return response()->json(['status' => true, 'message' => 'Order deleted successfully.']);
+    }
+    private function formatPaymentRequestMessage(FoodOrder $order): string
+    {
+        $nl = "\n";
+        $totalPayable = $order->total_price + $order->delivery_fee;
+
+        $message  = "مرحباً " . $order->customer_name . "," . $nl;
+        $message .= "تم تأكيد طلبك رقم *" . $order->id . "* وهو الآن قيد التجهيز." . $nl . $nl;
+        $message .= "*تفاصيل الدفع:*" . $nl;
+        $message .= "مبلغ الطلب: " . number_format($order->total_price, 3) . " OMR" . $nl;
+        $message .= "رسوم التوصيل: " . number_format($order->delivery_fee, 3) . " OMR" . $nl;
+        $message .= "*الإجمالي للدفع: " . number_format($totalPayable, 3) . " OMR*" . $nl . $nl;
+        $message .= "يرجى تحويل المبلغ إلى حساب البنك التالي:" . $nl;
+        $message .= "*رقم الحساب: YOUR_ACCOUNT_NUMBER*" . $nl . $nl; // REPLACE WITH YOUR ACTUAL ACCOUNT NUMBER
+        $message .= "الرجاء إرسال إيصال التحويل لتأكيد الطلب بشكل نهائي والبدء في التجهيز. شكراً لك!";
 
         return $message;
     }

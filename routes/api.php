@@ -134,8 +134,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('categories/{category}/upload-image', [\App\Http\Controllers\CategoryController::class, 'uploadImage']);
 
 // --- Online Food Ordering Routes ---
-// This is a public route for customers to place orders.
-Route::post('/online-orders', [OnlineOrderController::class, 'store']);
+// Public route for customers to place orders (no auth required)
+Route::apiResource('online-orders', OnlineOrderController::class);
 
-// This route is for the success page to fetch the details of the order it just created.
-Route::get('/online-orders/{foodOrder}', [OnlineOrderController::class, 'show']);
+
+
