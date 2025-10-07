@@ -9,6 +9,8 @@ use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WebHookController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\UltraMsgController;
+use App\Http\Controllers\PDFController;
 
 /*
 |--------------------------------------------------------------------------
@@ -24,6 +26,11 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', function () {
     return view('welcome');
 });
+
+// Test UltraMsg from web routes
+Route::get('/ultramsg/test-send', [UltraMsgController::class, 'testSend']);
+// Online order invoice (PDF)
+Route::get('/online-orders/{online_order}/invoice', [PDFController::class, 'PrintOnlineSale']);
 
 Route::get('/ordersAi',[\App\Http\Controllers\PDFController::class,'ordersAi']);
 Route::get('/orders',[\App\Http\Controllers\PDFController::class,'orders']);

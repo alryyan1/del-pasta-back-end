@@ -2,7 +2,6 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\MealController;
-use App\Http\Controllers\OrderController;
 use App\Http\Controllers\RequestedChildMealController;
 use App\Http\Controllers\ReservationController;
 use App\Http\Controllers\SettingsController;
@@ -17,6 +16,9 @@ use App\Http\Controllers\BuffetStepAdminController;
 use App\Http\Controllers\BuffetJuiceRuleAdminController;
 use App\Http\Controllers\BuffetOrderController;
 use App\Http\Controllers\OnlineOrderController;
+use App\Http\Controllers\UltraMsgController;
+use App\Http\Controllers\OrderController;
+use App\Http\Controllers\PDFController;
 
 /*
 |--------------------------------------------------------------------------
@@ -109,19 +111,25 @@ Route::middleware('auth:sanctum')->group(function () {
    Route::get('orderById/{order}', [OrderController::class, 'orderById']);
    Route::post('saveImage/{meal}', [MealController::class, 'saveImage']);
    Route::get('fileNames', [MealController::class, 'getFileNamesFromPublicFolder']);
-   Route::post('sendMsgWa/{order}', [\App\Http\Controllers\WaController::class, 'sendMsg']);
-   Route::post('sendMsgWaLocation/{order}', [\App\Http\Controllers\WaController::class, 'sendLocation']);
-   Route::post('sendMsgWaDocument/{order}', [\App\Http\Controllers\WaController::class, 'senDocument']);
+   // Legacy WaController routes removed; use UltraMsgController endpoints below
+
+   // UltraMsg API (secured) - send text and documents
+   Route::post('ultramsg/send-text', [UltraMsgController::class, 'sendText']);
+   Route::post('ultramsg/send-document', [UltraMsgController::class, 'sendDocument']);
+   Route::get('ultramsg/test-send', [UltraMsgController::class, 'testSend']);
+   Route::post('online-orders/{online_order}/confirm', [OrderController::class, 'confirmOnlineOrder']);
+   Route::post('online-orders/{online_order}/invoice/send', [PDFController::class, 'SendOnlineSale']);
    
    // WhatsApp Testing Route
-   Route::post('whatsapp/test', [\App\Http\Controllers\WaController::class, 'test']);
+   // Legacy WaController test removed
    
    Route::get('settings', [SettingsController::class, 'index']);
    Route::post('settings', [SettingsController::class, 'update']); // This now points to the new update method
-
-
-    // ... other authenticated routes
+   
+   
+   // ... other authenticated routes
 });
+Route::get('online-orders/{online_order}/invoice', [PDFController::class, 'PrintOnlineSale']);
 
  // OLD Order Route. The store method is now only for standard orders.
  Route::apiResource('buffet-orders', BuffetOrderController::class);
@@ -134,6 +142,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('categories/{category}/upload-image', [\App\Http\Controllers\CategoryController::class, 'uploadImage']);
 
 // --- Online Food Ordering Routes ---
+// Create online order with items directly (place BEFORE the resource to avoid {online_order}="create" collision)
+Route::post('online-orders/create', [OrderController::class, 'storeOnline']);
 // Public route for customers to place orders (no auth required)
 Route::apiResource('online-orders', OnlineOrderController::class);
 

@@ -22,6 +22,8 @@ use App\Models\RequestedResult;
 use App\Models\Service;
 use App\Models\Setting;
 use App\Models\Settings;
+use App\Models\OnlineOrder;
+use App\Services\UltraMsgService;
 use App\Models\Shift;
 use App\Models\Shipping;
 use App\Models\Specialist;
@@ -559,7 +561,7 @@ class PDFController extends Controller
         if ($wb){
             $result_as_bs64 = $pdf->output('name.pdf', 'S');
 //            Whatsapp::sendPdf($result_as_bs64, $order->customer->phone);
-             $wa = new WaController();
+             // replaced With UltraMsgService
                           $wa->sendDocument($request,$result_as_bs64,$order?->customer?->phone);
 
             //  $wa->sendDocument($request,$result_as_bs64);
@@ -572,7 +574,7 @@ class PDFController extends Controller
 //               return  $data;
 //                return  extractBase64FromOutput($result_as_bs64);
 
-                $wa = new WaController();
+                // replaced With UltraMsgService
 
               return  $wa->sendDocument($request,$data,$order?->customer?->phone);
 
@@ -587,6 +589,171 @@ class PDFController extends Controller
 
         }
 
+    }
+
+    public function PrintOnlineSale(Request $request, OnlineOrder $online_order)
+    {
+        // POS 80mm ticket layout with dynamic height
+        $online_order->loadMissing('items.meal');
+        $count = count($online_order->items);
+        $dynamicHeight = 120 + ($count * 10); // rough estimate for items
+        $custom_layout = array(80, $dynamicHeight);
+
+        $pdf = new Pdf('portrait', PDF_UNIT, $custom_layout, true, 'UTF-8', false);
+        $lg = array();
+        $lg['a_meta_charset'] = 'UTF-8';
+        $lg['a_meta_dir'] = 'rtl';
+        $lg['a_meta_language'] = 'fa';
+        $lg['w_page'] = 'page';
+        $pdf->setLanguageArray($lg);
+
+        $pdf->setCreator(PDF_CREATOR);
+        $pdf->setAuthor('del-pasta');
+        $pdf->setTitle('Online Order Invoice');
+        $pdf->setMargins(5, 4, 5);
+        $pdf->AddPage();
+
+        // Use logo.png from public folder
+        $logoPath = public_path('logo.png');
+        if (file_exists($logoPath)) {
+            $pdf->Image($logoPath, 45, 2, 50, 16, align: 'C', fitbox: 1);
+        }
+        $arial = TCPDF_FONTS::addTTFfont(public_path('arial.ttf'));
+        $pdf->setFont($arial, 'B', 10);
+        $pdf->Ln(18);
+        $pdf->Cell(0, 5, $settings?->kitchen_name ?? 'DEL-PASTA  دل باستا', 0, 1, 'C');
+        $pdf->setFont($arial, '', 9);
+        // $pdf->Cell(0, 5, 'فاتورة طلب عبر الإنترنت', 0, 1, 'C');
+        $pdf->Ln(1);
+
+        // Header info (compact)
+        $pdf->setFont($arial, '', 8);
+        $pdf->Cell(22, 4, 'رقم الطلب:', 0, 0);
+        $pdf->Cell(0, 4, (string) $online_order->id, 0, 1);
+        $pdf->Cell(22, 4, 'التاريخ:', 0, 0);
+        $pdf->Cell(0, 4, optional($online_order->created_at)->format('Y-m-d H:i'), 0, 1);
+        $pdf->Cell(22, 4, 'اسم العميل:', 0, 0);
+        $pdf->Cell(0, 4, (string) $online_order->customer_name, 0, 1);
+        $pdf->Cell(22, 4, 'الهاتف:', 0, 0);
+        $pdf->Cell(0, 4, (string) $online_order->customer_phone, 0, 1);
+        $pdf->Cell(22, 4, 'الولاية:', 0, 0);
+        $pdf->Cell(0, 4, (string) $online_order->customer_state, 0, 1);
+        $pdf->Cell(22, 4, 'المنطقة:', 0, 0);
+        $pdf->Cell(0, 4, (string) $online_order->customer_area, 0, 1);
+      
+
+        $pdf->Ln(1);
+        // Items header
+        $pdf->setFont($arial, 'B', 8);
+        $pdf->Cell(48, 5, 'الصنف', 'TB', 0, 'C');
+        $pdf->Cell(12, 5, 'الكمية', 'TB', 0, 'C');
+        $pdf->Cell(10, 5, 'السعر', 'TB', 1, 'C');
+        $pdf->setFont($arial, '', 8);
+
+        $total = 0.0;
+        foreach ($online_order->items as $it) {
+            $line = (float) ($it->price ?? 0) * (int) $it->quantity;
+            $total += $line;
+            $pdf->Cell(48, 5, (string) optional($it->meal)->name, 0, 0);
+            $pdf->Cell(12, 5, (string) $it->quantity, 0, 0, 'C');
+            $pdf->Cell(10, 5, number_format($line, 3).'', 0, 1, 'R');
+        }
+
+        $pdf->Ln(1);
+        $pdf->setFont($arial, 'B', 9);
+        $pdf->Cell(60, 5, 'المجموع', 'T', 0, 'R');
+        $pdf->Cell(10, 5, number_format($total, 3).'', 'T', 1, 'R');
+
+        if ($request->has('base64')) {
+            $result = $pdf->output('invoice.pdf', 'E');
+            $data = substr($result, strpos($result, 'JVB'));
+            return response($data, 200);
+        }
+
+        return $pdf->output('invoice.pdf', 'I');
+    }
+
+    public function SendOnlineSale(Request $request, OnlineOrder $online_order)
+    {
+        // Generate POS 80mm PDF to Base64 and send via UltraMsg
+        $online_order->loadMissing('items.meal');
+        $count = count($online_order->items);
+        $dynamicHeight = 120 + ($count * 10); // rough estimate for items
+        $custom_layout = array(80, $dynamicHeight);
+
+        $pdf = new Pdf('portrait', PDF_UNIT, $custom_layout, true, 'UTF-8', false);
+        $lg = array();
+        $lg['a_meta_charset'] = 'UTF-8';
+        $lg['a_meta_dir'] = 'rtl';
+        $lg['a_meta_language'] = 'fa';
+        $lg['w_page'] = 'page';
+        $pdf->setLanguageArray($lg);
+
+        $pdf->setCreator(PDF_CREATOR);
+        $pdf->setAuthor('del-pasta');
+        $pdf->setTitle('Online Order Invoice');
+        $pdf->setMargins(5, 4, 5);
+        $pdf->AddPage();
+
+        // Use logo.png from public folder
+        $logoPath = public_path('logo.png');
+        if (file_exists($logoPath)) {
+            $pdf->Image($logoPath, 45, 2, 50, 16, align: 'C', fitbox: 1);
+        }
+        $arial = TCPDF_FONTS::addTTFfont(public_path('arial.ttf'));
+        $pdf->setFont($arial, 'B', 10);
+        $pdf->Ln(18);
+        $pdf->Cell(0, 5, $settings?->kitchen_name ?? 'DEL-PASTA  دل باستا', 0, 1, 'C');
+        $pdf->setFont($arial, '', 9);
+        // $pdf->Cell(0, 5, 'فاتورة طلب عبر الإنترنت', 0, 1, 'C');
+        $pdf->Ln(1);
+
+        // Header info (compact)
+        $pdf->setFont($arial, '', 8);
+        $pdf->Cell(22, 4, 'رقم الطلب:', 0, 0);
+        $pdf->Cell(0, 4, (string) $online_order->id, 0, 1);
+        $pdf->Cell(22, 4, 'التاريخ:', 0, 0);
+        $pdf->Cell(0, 4, optional($online_order->created_at)->format('Y-m-d H:i'), 0, 1);
+        $pdf->Cell(22, 4, 'اسم العميل:', 0, 0);
+        $pdf->Cell(0, 4, (string) $online_order->customer_name, 0, 1);
+        $pdf->Cell(22, 4, 'الهاتف:', 0, 0);
+        $pdf->Cell(0, 4, (string) $online_order->customer_phone, 0, 1);
+        $pdf->Cell(22, 4, 'الولاية:', 0, 0);
+        $pdf->Cell(0, 4, (string) $online_order->customer_state, 0, 1);
+        $pdf->Cell(22, 4, 'المنطقة:', 0, 0);
+        $pdf->Cell(0, 4, (string) $online_order->customer_area, 0, 1);
+
+        $pdf->Ln(1);
+        // Items header
+        $pdf->setFont($arial, 'B', 8);
+        $pdf->Cell(48, 5, 'الصنف', 'TB', 0, 'C');
+        $pdf->Cell(12, 5, 'الكمية', 'TB', 0, 'C');
+        $pdf->Cell(10, 5, 'السعر', 'TB', 1, 'C');
+        $pdf->setFont($arial, '', 8);
+
+        $total = 0.0;
+        foreach ($online_order->items as $it) {
+            $line = (float) ($it->price ?? 0) * (int) $it->quantity;
+            $total += $line;
+            $pdf->Cell(48, 5, (string) optional($it->meal)->name, 0, 0);
+            $pdf->Cell(12, 5, (string) $it->quantity, 0, 0, 'C');
+            $pdf->Cell(10, 5, number_format($line, 3).'', 0, 1, 'R');
+        }
+
+        $pdf->Ln(1);
+        $pdf->setFont($arial, 'B', 9);
+        $pdf->Cell(60, 5, 'المجموع', 'T', 0, 'R');
+        $pdf->Cell(10, 5, number_format($total, 3).'', 'T', 1, 'R');
+
+        // Output as binary string and convert to base64
+        $binary = $pdf->output('invoice.pdf', 'S');
+        $base64 = base64_encode($binary);
+
+        $ultra = app(UltraMsgService::class);
+        $phone = UltraMsgService::formatPhoneNumber($online_order->customer_phone, config('services.ultramsg.default_country_code', '249'));
+        $result = $ultra->sendDocumentRich($phone ?? $online_order->customer_phone, 'invoice-'.$online_order->id.'.pdf', $base64, 'فاتورة الطلب');
+
+        return response()->json($result);
     }
 
 }

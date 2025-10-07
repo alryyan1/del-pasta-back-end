@@ -2,12 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\FoodOrder;
+use App\Models\OnlineOrder;
 use App\Models\Whatsapp; // Your static helper for customer confirmation
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Services\UltraMsgService;
 
 class OnlineOrderController extends Controller
 {
@@ -40,7 +41,7 @@ class OnlineOrderController extends Controller
             $orderNumber = 'WEB-' . Carbon::now()->format('ymd-His');
 
             // Create the main order record
-            $order = FoodOrder::create([
+            $order = OnlineOrder::create([
                 'order_number' => $orderNumber,
                 'customer_name' => $validated['customer']['name'],
                 'customer_phone' => $validated['customer']['phone'],
@@ -69,8 +70,8 @@ class OnlineOrderController extends Controller
                 $messageToManager = $this->formatOrderForWhatsapp($order);
                 $managerPhone = '78622990'; // Your business/manager number
 
-                $waController = new WaController();
-                $waController->sendTextMessage($managerPhone, $messageToManager);
+                $ultra = new \App\Services\UltraMsgService();
+                $ultra->sendTextMessage(\App\Services\UltraMsgService::formatPhoneNumber($managerPhone, config('services.ultramsg.default_country_code', '249')) ?? $managerPhone, $messageToManager);
             } catch (\Exception $e) {
                 // Log the error but don't fail the entire request
                 Log::error('WhatsApp notification failed for Online Order ID ' . $order->id . ': ' . $e->getMessage());
@@ -84,14 +85,14 @@ class OnlineOrderController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(FoodOrder $online_order)
+    public function show(OnlineOrder $online_order)
     {
         return response()->json(['data' => $online_order->load('items.meal')]);
     }
     /**
      * Helper method to format the order details into a WhatsApp-friendly message.
      */
-    private function formatOrderForWhatsapp(FoodOrder $order): string
+    private function formatOrderForWhatsapp(OnlineOrder $order): string
     {
         $nl = "\n"; // Newline character
         
@@ -153,26 +154,43 @@ class OnlineOrderController extends Controller
      */
     public function index(Request $request)
     {
-        $query = FoodOrder::with('items.meal') // Eager load items and their meal details
-            ->orderBy('created_at', 'desc');
+        $query = OnlineOrder::with('items.meal');
 
-        // Add filtering logic
-        if ($request->has('search')) {
-            $searchTerm = $request->search;
+        // Sorting
+        $sort = strtolower($request->get('sort', 'desc')) === 'asc' ? 'asc' : 'desc';
+        $query->orderBy('created_at', $sort);
+
+        // Backend filtering
+        $searchTerm = $request->get('search');
+        if (!empty($searchTerm)) {
             $query->where(function($q) use ($searchTerm) {
                 $q->where('order_number', 'LIKE', "%{$searchTerm}%")
                   ->orWhere('customer_name', 'LIKE', "%{$searchTerm}%")
-                  ->orWhere('customer_phone', 'LIKE', "%{$searchTerm}%");
+                  ->orWhere('customer_phone', 'LIKE', "%{$searchTerm}%")
+                  ->orWhere('customer_address', 'LIKE', "%{$searchTerm}%");
             });
         }
 
-        return $query->paginate(15);
+        if ($state = $request->get('state')) {
+            $query->where('state', 'LIKE', "%{$state}%");
+        }
+        if ($area = $request->get('area')) {
+            $query->where('area', 'LIKE', "%{$area}%");
+        }
+
+        // Server-side pagination size
+        $perPage = (int) $request->get('per_page', 15);
+        if (!in_array($perPage, [10, 50, 200, 500, 15], true)) {
+            $perPage = 15;
+        }
+
+        return $query->paginate($perPage);
     }
 
  /**
      * Update the status and/or delivery fee of the specified order.
      */
-    public function update(Request $request, FoodOrder $online_order)
+    public function update(Request $request, OnlineOrder $online_order)
     {
         // Debug logging
         Log::info('OnlineOrder Update Request', [
@@ -193,9 +211,10 @@ class OnlineOrderController extends Controller
         // We use 'confirmed' as the trigger status.
         if (isset($validated['status']) && $validated['status'] === 'confirmed' && $originalStatus !== 'confirmed') {
             try {
-                $paymentMessage = $this->formatPaymentRequestMessage($online_order);
-                $waController = new WaController();
-                $waController->sendTextMessage($online_order->customer_phone, $paymentMessage);
+                $message = "تم تأكيد طلبك رقم *{$online_order->id}*. شكراً لتعاملكم مع DEL-PASTA.";
+                $ultra = new UltraMsgService();
+                $phone = UltraMsgService::formatPhoneNumber($online_order->customer_phone, config('services.ultramsg.default_country_code', '249'));
+                $ultra->sendTextMessage($phone ?? $online_order->customer_phone, $message);
             } catch (\Exception $e) {
                 Log::error('WhatsApp payment request failed for Order ID ' . $online_order->id . ': ' . $e->getMessage());
             }
@@ -206,12 +225,12 @@ class OnlineOrderController extends Controller
      /**
      * Remove the specified resource from storage.
      */
-        public function destroy(FoodOrder $online_order)
+    public function destroy(OnlineOrder $online_order)
     {
         $online_order->delete();
         return response()->json(['status' => true, 'message' => 'Order deleted successfully.']);
     }
-    private function formatPaymentRequestMessage(FoodOrder $order): string
+    private function formatPaymentRequestMessage(OnlineOrder $order): string
     {
         $nl = "\n";
         $totalPayable = $order->total_price + $order->delivery_fee;

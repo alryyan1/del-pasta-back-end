@@ -13,6 +13,8 @@ use App\Models\Deposit;
 use App\Models\Order;
 use App\Models\Meal;
 use App\Models\OrderMeal;
+use App\Models\OnlineOrder;
+use App\Models\OnlineOrderItem;
 use App\Models\Settings;
 use App\Models\Whatsapp;
 use Carbon\Carbon;
@@ -24,6 +26,8 @@ use Illuminate\Validation\ValidationException;
 use Maatwebsite\Excel\Facades\Excel;
 use PDO;
 use PHPUnit\TextUI\XmlConfiguration\Logging\TestDox\Text;
+use Illuminate\Support\Facades\Http;
+use App\Services\UltraMsgService;
 
 class OrderController extends Controller
 {
@@ -31,6 +35,31 @@ class OrderController extends Controller
     {
         return $order;
 
+    }
+    /**
+     * Confirm an online order and send a confirmation WhatsApp message via UltraMsg
+     */
+    public function confirmOnlineOrder(Request $request, OnlineOrder $online_order)
+    {
+        if ($online_order->status !== 'confirmed') {
+            $online_order->status = 'confirmed';
+            $online_order->save();
+        }
+
+        try {
+            $ultra = app(UltraMsgService::class);
+            $phone = UltraMsgService::formatPhoneNumber($online_order->customer_phone, config('services.ultramsg.default_country_code', '968'));
+            $message = "دل باستا | Del Pasta\n\nتم تأكيد طلبك رقم {$online_order->id} بنجاح ✅\n\nممنونين لتعاملكم معنا💛";
+            if ($ultra->isConfigured()) {
+                $ultra->sendTextMessage($phone ?? $online_order->customer_phone, $message);
+            } else {
+                \Log::warning('UltraMsg not configured (confirmOnlineOrder) for online order ID '.$online_order->id);
+            }
+        } catch (\Throwable $e) {
+            \Log::error('UltraMsg confirmOnlineOrder failed for online order ID '.$online_order->id.': '.$e->getMessage());
+        }
+
+        return response()->json(['status' => true, 'order' => $online_order], 200);
     }
     public function notify(Request $request, Order $order)
     {
@@ -342,6 +371,91 @@ Text;
     public function destroy(Request $request ,Order $order)
     {
         return ['status'=>$order->delete()];
+    }
+
+    /**
+     * Store online order with items (public or protected usage).
+     * Payload: { name, phone, address, notes?, items: [ { meal_id, quantity } ] }
+     */
+    public function storeOnline(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'phone' => 'required|string|max:30',
+            'notes' => 'nullable|string',
+            'state' => 'nullable|string|max:255',
+            'area' => 'nullable|string|max:255',
+            'items' => 'required|array|min:1',
+            'items.*.meal_id' => 'required|exists:meals,id',
+            'items.*.quantity' => 'required|integer|min:1',
+        ]);
+
+        // Create dedicated online order and items (no insertion into standard orders tables)
+        $totalPrice = 0.0;
+        foreach ($validated['items'] as $it) {
+            $meal = Meal::findOrFail($it['meal_id']);
+            $totalPrice += ((float)$meal->price) * (int)$it['quantity'];
+        }
+
+        $orderNumber = 'WEB-' . Carbon::now()->format('ymd-His');
+        $onlineOrder = OnlineOrder::create([
+            'order_number' => $orderNumber,
+            'customer_name' => $validated['name'],
+            'customer_phone' => $validated['phone'],
+            'customer_address' => $validated['area'] .','.$validated['state'],
+            'notes' => $validated['notes'] ?? null,
+            'total_price' => $totalPrice,
+            'status' => 'pending',
+            'order_type' => 'delivery',
+            'state' => $validated['state'] ?? null,
+            'area' => $validated['area'] ?? null,
+        ]);
+
+        foreach ($validated['items'] as $it) {
+            $meal = Meal::findOrFail($it['meal_id']);
+            OnlineOrderItem::create([
+                'online_order_id' => $onlineOrder->id,
+                'meal_id' => $meal->id,
+                'quantity' => (int)$it['quantity'],
+                'price' => (float)$meal->price,
+            ]);
+        }
+
+        // Notify via UltraMsg (non-blocking)
+        try {
+            $onlineOrder->load('items.meal');
+            $lines = [];
+            foreach ($onlineOrder->items as $oi) {
+                $lineTotal = number_format(($oi->price ?? 0) * $oi->quantity, 3);
+                $lines[] = "- {$oi->meal->name} x {$oi->quantity} = {$lineTotal} OMR";
+            }
+            $details = implode("\n", $lines);
+            $total = number_format($onlineOrder->total_price, 3);
+            $msg = "طلب جديد\nالاسم: {$onlineOrder->customer_name}\nالهاتف: {$onlineOrder->customer_phone}\nالعنوان: {$onlineOrder->customer_address}\n\nتفاصيل الطلب:\n{$details}\n—\nالمجموع: {$total} OMR";
+
+            $ultra = app(UltraMsgService::class);
+            if ($ultra->isConfigured()) {
+                $welcomeMSg = "أهلاً وسهلاً بك 🌸
+
+شكرًا لطلبك من Del Pasta 
+استلمنا طلبك بنجاح، نراجع التفاصيل حاليًا وراح نأكد لك الطلب قريبًا بإذن الله
+
+ونسعد بخدمتك دائماً 💛";
+                $ultra->sendText('+968'.$onlineOrder->customer_phone, $welcomeMSg);
+                $ultra->sendText('+249991961111', $msg);
+                $ultra->sendText('+96895519234', $welcomeMSg);
+                $ultra->sendText('+96895519234', $msg);
+            }else{
+                \Log::warning('UltraMsg not configured for online order ID '.$onlineOrder->id);
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('UltraMsg notify failed for online order ID '.$onlineOrder->id.': '.$e->getMessage());
+        }
+
+        return response()->json([
+            'status' => true,
+            'data' => $onlineOrder->load('items.meal'),
+        ], 201);
     }
 
     public function exportExcel()

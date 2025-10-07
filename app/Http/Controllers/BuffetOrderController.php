@@ -130,7 +130,7 @@ class BuffetOrderController extends Controller
                 $buffetManagerPhone = '78622990'; // Your business/manager number
                 $customerPhone = $order->customer->phone;
 
-                $waController = new WaController();
+                // TODO: Replace with UltraMsgService if messaging needed
                 
                 // 1. Send detailed order to the manager
                 $waController->sendTextMessage($buffetManagerPhone, $messageToManager);

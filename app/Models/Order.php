@@ -140,4 +140,48 @@ class Order extends Model
     {
         return $this->hasMany(Deduct::class);
     }
+
+    /**
+     * Create a new order for online checkout, attach items, and return the fresh model.
+     * Expected $data keys: customer_id?, user_id?, delivery_address?, notes?, items: [ ['meal_id'=>int, 'quantity'=>int] ]
+     */
+    public static function createOnline(array $data): self
+    {
+        $today = \Carbon\Carbon::today();
+        /** @var Order|null $lastOrder */
+        $lastOrder = self::whereDate('created_at', '=', $today)->orderByDesc('id')->first();
+        $new_number = $lastOrder ? $lastOrder->order_number + 1 : 1;
+
+        $order = self::create([
+            'order_number' => $new_number,
+            'user_id' => $data['user_id'] ?? (auth()->id() ?? 1),
+            'customer_id' => $data['customer_id'] ?? null,
+            'delivery_address' => $data['delivery_address'] ?? '',
+            'notes' => $data['notes'] ?? null,
+            'status' => 'pending',
+            'draft' => ' '
+        ]);
+
+        foreach ($data['items'] as $item) {
+            /** @var Meal $meal */
+            $meal = Meal::findOrFail($item['meal_id']);
+            $quantity = max(1, (int)$item['quantity']);
+            $order->addMealItem($meal, $quantity);
+        }
+
+        return $order->fresh(['mealOrders.meal','customer']);
+    }
+
+    /**
+     * Attach a meal item to the order with current meal price and quantity.
+     */
+    public function addMealItem(Meal $meal, int $quantity = 1): OrderMeal
+    {
+        return $this->mealOrders()->create([
+            'meal_id' => $meal->id,
+            'quantity' => $quantity,
+            'price' => $meal->price,
+            'status' => 'pending',
+        ]);
+    }
 }
